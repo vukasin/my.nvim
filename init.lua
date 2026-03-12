@@ -271,6 +271,40 @@ require('lazy').setup({
   -- options to `gitsigns.nvim`.
   --
   -- See `:help gitsigns` to understand what the configuration keys do
+  {
+    'mason-org/mason.nvim',
+    config = function()
+      require('mason').setup {
+        PATH = 'prepend',
+      }
+    end,
+  },
+  {
+    'mason-org/mason-lspconfig.nvim',
+    dependencies = {
+      'mason-org/mason.nvim',
+      'neovim/nvim-lspconfig',
+    },
+    config = function()
+      require('mason-lspconfig').setup()
+    end,
+  },
+  {
+    'WhoIsSethDaniel/mason-tool-installer.nvim',
+    dependencies = {
+      'mason-org/mason.nvim',
+    },
+    config = function()
+      require('mason-tool-installer').setup {
+        ensure_installed = {
+          'pyright',
+          'debugpy',
+          'black',
+          'isort',
+        },
+      }
+    end,
+  },
   { -- Adds git related signs to the gutter, as well as utilities for managing changes
     'lewis6991/gitsigns.nvim',
     opts = {
@@ -492,6 +526,114 @@ require('lazy').setup({
       -- Allows extra capabilities provided by blink.cmp
       'saghen/blink.cmp',
     },
+    {
+      'mfussenegger/nvim-dap',
+      dependencies = {
+        'rcarriga/nvim-dap-ui',
+        'nvim-neotest/nvim-nio',
+        'mfussenegger/nvim-dap-python',
+      },
+      keys = {
+        {
+          '<F5>',
+          function()
+            require('dap').continue()
+          end,
+          desc = 'Debug: Start/Continue',
+        },
+        {
+          '<F10>',
+          function()
+            require('dap').step_over()
+          end,
+          desc = 'Debug: Step Over',
+        },
+        {
+          '<F11>',
+          function()
+            require('dap').step_into()
+          end,
+          desc = 'Debug: Step Into',
+        },
+        {
+          '<F12>',
+          function()
+            require('dap').step_out()
+          end,
+          desc = 'Debug: Step Out',
+        },
+        {
+          '<leader>db',
+          function()
+            require('dap').toggle_breakpoint()
+          end,
+          desc = 'Debug: Toggle Breakpoint',
+        },
+        {
+          '<leader>dB',
+          function()
+            require('dap').set_breakpoint(vim.fn.input 'Breakpoint condition: ')
+          end,
+          desc = 'Debug: Conditional Breakpoint',
+        },
+        {
+          '<leader>dr',
+          function()
+            require('dap').repl.open()
+          end,
+          desc = 'Debug: Open REPL',
+        },
+        {
+          '<leader>dl',
+          function()
+            require('dap').run_last()
+          end,
+          desc = 'Debug: Run Last',
+        },
+        {
+          '<leader>dt',
+          function()
+            require('dap-python').test_method()
+          end,
+          desc = 'Debug: Test Method',
+        },
+        {
+          '<leader>dT',
+          function()
+            require('dap-python').test_class()
+          end,
+          desc = 'Debug: Test Class',
+        },
+      },
+      config = function()
+        local dap = require 'dap'
+        local dapui = require 'dapui'
+
+        dapui.setup()
+
+        dap.listeners.before.attach.dapui_config = function()
+          dapui.open()
+        end
+        dap.listeners.before.launch.dapui_config = function()
+          dapui.open()
+        end
+        dap.listeners.before.event_terminated.dapui_config = function()
+          dapui.close()
+        end
+        dap.listeners.before.event_exited.dapui_config = function()
+          dapui.close()
+        end
+
+        -- Option A: use Mason-installed debugpy adapter
+        local mason_path = vim.fn.stdpath 'data' .. '/mason/packages/debugpy/venv/bin/python'
+        if vim.fn.has 'win32' == 1 then
+          mason_path = vim.fn.stdpath 'data' .. '/mason/packages/debugpy/venv/Scripts/python.exe'
+        end
+        require('dap-python').setup(mason_path)
+
+        require('dap-python').test_runner = 'pytest'
+      end,
+    },
     config = function()
       -- Brief aside: **What is LSP?**
       --
@@ -673,7 +815,7 @@ require('lazy').setup({
       local servers = {
         -- clangd = {},
         -- gopls = {},
-        -- pyright = {},
+        pyright = {},
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         --
@@ -681,7 +823,7 @@ require('lazy').setup({
         --    https://github.com/pmizio/typescript-tools.nvim
         --
         -- But for many setups, the LSP (`ts_ls`) will work just fine
-        -- ts_ls = {},
+        ts_ls = {},
         --
 
         lua_ls = {
@@ -694,7 +836,7 @@ require('lazy').setup({
                 callSnippet = 'Replace',
               },
               -- You can toggle below to ignore Lua_LS's noisy `missing-fields` warnings
-              -- diagnostics = { disable = { 'missing-fields' } },
+              diagnostics = { disable = { 'missing-fields' } },
             },
           },
         },
@@ -716,6 +858,9 @@ require('lazy').setup({
       local ensure_installed = vim.tbl_keys(servers or {})
       vim.list_extend(ensure_installed, {
         'stylua', -- Used to format Lua code
+        'black',
+        'isort',
+        'debugpy',
       })
       require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
@@ -735,7 +880,10 @@ require('lazy').setup({
       }
     end,
   },
-
+  {
+    'tpope/vim-fugitive',
+    lazy = false,
+  },
   { -- Autoformat
     'stevearc/conform.nvim',
     event = { 'BufWritePre' },
@@ -1013,6 +1161,24 @@ require('lazy').setup({
 })
 
 vim.lsp.enable 'pyright'
+-- require('dap-python').setup 'uv'
+require('dap-python').setup(vim.fn.exepath 'debugpy-adapter')
+table.insert(require('dap').configurations.python, {
+  type = 'python',
+  request = 'launch',
+  name = 'Launch current file',
+  program = '${file}',
+  console = 'integratedTerminal',
+})
 
+table.insert(require('dap').configurations.python, {
+  type = 'python',
+  request = 'launch',
+  name = 'Launch module',
+  module = function()
+    return vim.fn.input 'Module name: '
+  end,
+  console = 'integratedTerminal',
+})
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
